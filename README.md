@@ -13,3 +13,9 @@ Base station sends control events on `sensorname/ctrlBtS`
 
 There is no formal teardown if a sensor leaves, as inactive topics do not cost us anything: they can just be left.
 Web interface views of sensors can also persist so that students can copy up experiments.
+
+```
+mosquitto -v -c mosquitto.conf
+go run .
+# python testing.py
+```
