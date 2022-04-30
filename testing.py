@@ -45,5 +45,8 @@ client.loop_start()
 subscribe(client, f"{cid}/ctrlBtS")
 publish(client, f"{cid}/ctrlStB", "ping")
 
+data = 0
 while True:
-    pass
+    input("> ")
+    publish(client, f"{cid}/data", f"{data}")
+    data = [1, 0][data]

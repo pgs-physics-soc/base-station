@@ -8,43 +8,25 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 	"sync"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	"github.com/gorilla/websocket"
 )
 
 var sensorId int = 0
 var sensorIdMut sync.Mutex
 var client mqtt.Client
+var upgrader = websocket.Upgrader{} // use default options
 
 var messagePubHandler mqtt.MessageHandler = func(client mqtt.Client, msg mqtt.Message) {
 	log.Printf("received %s from %s, don't know what to do with it", msg.Payload(), msg.Topic())
 }
-
 var connectHandler mqtt.OnConnectHandler = func(client mqtt.Client) {
 	log.Printf("Connected to mosquitto broker")
 }
-
 var connectLostHandler mqtt.ConnectionLostHandler = func(client mqtt.Client, err error) {
 	log.Printf("Connection lost: %v", err)
-}
-
-func binaryPressureSensor(client mqtt.Client, msg mqtt.Message) {
-	data := string(msg.Payload())
-	sensorname := strings.Split(msg.Topic(), "/")[0]
-	log.Printf("got data %s from binary pressure sensor %s", data, sensorname)
-}
-
-func binaryPressureSensorCtrl(client mqtt.Client, msg mqtt.Message) {
-	ctrl := string(msg.Payload())
-	sensorname := strings.Split(msg.Topic(), "/")[0]
-	log.Printf("got ctrl %s from binary pressure sensor %s", ctrl, sensorname)
-
-	if ctrl == "ping" {
-		token := client.Publish(sensorname+"/ctrlBtS", 0, false, "pong")
-		token.Wait()
-	}
 }
 
 func root(w http.ResponseWriter, req *http.Request) {
@@ -58,30 +40,24 @@ func newsensor(w http.ResponseWriter, req *http.Request) {
 		http.Error(w, "url param type missing", 400)
 		return
 	}
-	var dataHandler mqtt.MessageHandler
-	var ctrlHandler mqtt.MessageHandler
 	typ := keys[0] // sensor needs to hit <ip>/newsensor?type=[sometype]
+
+	sensorIdMut.Lock() // following code is atomic
+	defer sensorIdMut.Unlock()
+	sensorId += 1
+	sensorname := fmt.Sprintf("sensor%d", sensorId)
 
 	switch typ {
 	case "binary-pressure-sensor":
-		dataHandler = binaryPressureSensor
-		ctrlHandler = binaryPressureSensorCtrl
+		go binaryPressureSensorRunner(sensorname)
 	default:
 		log.Printf("unimplemented sensor type %s", typ)
 		http.Error(w, "unimplemented sensor type", 400)
+		sensorId -= 1
 		return
 	}
 
-	sensorIdMut.Lock() // following code is atomic
-	sensorId += 1
-	sensorname := fmt.Sprintf("sensor%d", sensorId)
-	sensorIdMut.Unlock()
-
-	fmt.Fprintf(w, sensorname) // send the name to the sensor
-	token := client.Subscribe(sensorname+"/data", 1, dataHandler)
-	token.Wait()
-	token = client.Subscribe(sensorname+"/ctrlStB", 1, ctrlHandler)
-	token.Wait()
+	fmt.Fprint(w, sensorname) // send the name to the sensor
 }
 
 func main() {
@@ -98,7 +74,11 @@ func main() {
 		log.Fatal(token.Error())
 	}
 
+	allBinaryPressureSensors = make(map[string]*BinaryPressureSensor)
+
 	http.HandleFunc("/newsensor", newsensor)
+	http.HandleFunc("/binaryPressureSensor", binaryPressureSensorWebpage)
+	http.HandleFunc("/binaryPressureSensorWS", runBinaryPressureSensorWS)
 	http.HandleFunc("/", root)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

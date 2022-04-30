@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title> Binary Pressure Sensor </title>
+    <style>
+        .square {
+            height: 50px;
+            width: 50px;
+            background-color: #000;
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <div id="square" class="square"></div>
+        <h1>Data log:</h1>
+        <div id="container"></div>
+    </main>
+
+
+    <script>
+        var loc = window.location, new_uri;
+        new_uri = "ws:";
+        new_uri += "//" + loc.host;
+        new_uri += loc.pathname + "WS?name=sensor1";
+        var socket = new WebSocket(new_uri);
+        socket.onmessage = function (event) {
+            let ele = document.getElementById('container');
+            var current = new Date();
+            ele.innerHTML += current.toLocaleTimeString() + " " + event.data + "<br>";
+
+            let sq = document.getElementById('square');
+            if (event.data === "1") {
+                sq.style.backgroundColor = "#f00";
+            } else {
+                sq.style.backgroundColor = "#000";
+            }
+
+
+        }
+    </script>
+</body>
+
+</html>
